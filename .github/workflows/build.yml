@@ -1,0 +1,83 @@
+name: Build and Package ePrescriptions
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build, Test and Package
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore NuGet Packages
+        run: msbuild e_prescriptions.sln /t:Restore /p:Configuration=Release
+
+      - name: Build Solution
+        run: msbuild e_prescriptions.sln /p:Configuration=Release /p:Platform="Any CPU" /m /v:m
+
+      - name: Run Unit Tests
+        run: dotnet test tests/ePrescriptions.Tests/ePrescriptions.Tests.csproj -c Release --no-build --logger "trx;LogFileName=test_results.trx"
+
+      - name: Verify Test Counters
+        shell: pwsh
+        run: |
+          $trxFiles = Get-ChildItem -Path tests/ePrescriptions.Tests/TestResults -Filter *.trx -Recurse
+          if ($trxFiles.Count -eq 0) { throw "No trx test results found" }
+          [xml]$xml = Get-Content $trxFiles[0].FullName
+          $counters = $xml.TestRun.ResultSummary.Counters
+          Write-Host "Test Run Counters - Total: $($counters.total), Executed: $($counters.executed), Passed: $($counters.passed), Failed: $($counters.failed)"
+          if ([int]$counters.executed -eq 0) { throw "No tests were executed!" }
+          if ([int]$counters.failed -gt 0) { throw "$($counters.failed) test(s) failed!" }
+
+      - name: Ensure SQLite Interop Assemblies
+        shell: pwsh
+        run: |
+          $appBin = "src/ePrescriptions.App/bin/Release/net48"
+          $x86Dst = "$appBin/x86"
+          $x64Dst = "$appBin/x64"
+          if (-not (Test-Path $x86Dst)) { New-Item -ItemType Directory -Path $x86Dst -Force | Out-Null }
+          if (-not (Test-Path $x64Dst)) { New-Item -ItemType Directory -Path $x64Dst -Force | Out-Null }
+          $nugetFolder = Join-Path $env:USERPROFILE ".nuget/packages/stub.system.data.sqlite.core.netframework"
+          if (Test-Path $nugetFolder) {
+            $latest = Get-ChildItem -Path $nugetFolder | Sort-Object Name -Descending | Select-Object -First 1
+            if ($latest) {
+              $x86Src = Join-Path $latest.FullName "build/net48/x86/SQLite.Interop.dll"
+              $x64Src = Join-Path $latest.FullName "build/net48/x64/SQLite.Interop.dll"
+              if ((Test-Path $x86Src) -and -not (Test-Path "$x86Dst/SQLite.Interop.dll")) { Copy-Item $x86Src -Destination $x86Dst -Force }
+              if ((Test-Path $x64Src) -and -not (Test-Path "$x64Dst/SQLite.Interop.dll")) { Copy-Item $x64Src -Destination $x64Dst -Force }
+            }
+          }
+
+      - name: Compile Inno Setup Installer
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\e_prescriptions_installer.iss
+
+      - name: Upload Inno Setup Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: e_prescriptions_installer
+          path: dist/installer/e_prescriptions_Setup_v1.0.0.exe
+          if-no-files-found: error
+
+      - name: Upload Application Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: e_prescriptions_binaries
+          path: src/ePrescriptions.App/bin/Release/net48/
+          if-no-files-found: error

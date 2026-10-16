@@ -1,0 +1,59 @@
+## Visual Studio / .NET Standard .gitignore
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa]rchive/
+[Aa]rm/
+[Aa]rm64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+dist/
+
+# Visual Studio files
+.vs/
+*.user
+*.userosscache
+*.suo
+*.userprefs
+*.sln.docstates
+*.opensdf
+*.sdf
+*.cache
+*.VC.opendb
+*.VC.db
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+
+# Test Results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+
+# User-specific files
+*.rsuser
+*.suo
+*.user
+*.useroptions
+*.DotSettings.user
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+
+# App-specific runtime generated folders
+**/ePrescriptions/backups/*
+**/ePrescriptions/logs/*
+**/ePrescriptions/exports/*
