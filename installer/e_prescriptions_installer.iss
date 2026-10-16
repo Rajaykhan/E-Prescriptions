@@ -35,7 +35,7 @@ VersionInfoDescription={#MyAppDisplayName}
 VersionInfoVersion={#MyAppVersion}.0
 DefaultDirName={autopf}\e_prescriptions
 DefaultGroupName=e_prescriptions
-UninstallDisplayIcon={app}\{#MyAppExeName}
+UninstallDisplayIcon={app}\app.ico
 SetupIconFile=..\src\ePrescriptions.App\Resources\app.ico
 Compression=lzma2/ultra64
 SolidCompression=yes
@@ -70,6 +70,9 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 ; 1) الملف التنفيذي الرئيسي ومكتبات المشروع
 Source: "..\src\ePrescriptions.App\bin\Release\net48\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.xml"
 
+; ملف أيقونة البرنامج المعتمد (الكبسولة) لضمان ظهوره على سطح المكتب بدون مشاكل
+Source: "..\src\ePrescriptions.App\Resources\app.ico"; DestDir: "{app}"; Flags: ignoreversion
+
 ; 2) ملفات SQLite الأصلية (Native Interop DLLs) - حاسمة للعمل في AnyCPU على 32 و 64 بت
 ; يتم نسخها بجانب البرنامج داخل مجلدي x86 و x64 حتى يتمكن محرك SQLite من تحميل المعمارية الصحيحة تلقائياً
 Source: "..\src\ePrescriptions.App\bin\Release\net48\x86\SQLite.Interop.dll"; DestDir: "{app}\x86"; Flags: ignoreversion
@@ -81,9 +84,9 @@ Source: "redist\{#Net48RedistName}"; DestDir: "{tmp}"; Flags: dontcopy
 #endif
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"
-Name: "{group}\إلغاء تثبيت {#MyAppName}"; Filename: "{uninstallexe}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"
+Name: "{group}\إلغاء تثبيت {#MyAppName}"; Filename: "{uninstallexe}"; IconFilename: "{app}\app.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
 
 [Dirs]
 ; مجلد البيانات المشترك (قاعدة البيانات والنسخ الاحتياطية والسجلات والتصدير) في ProgramData

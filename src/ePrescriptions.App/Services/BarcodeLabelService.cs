@@ -55,9 +55,8 @@ namespace ePrescriptions.App.Services
                 string displayName = item.NameAr.Length > 26 ? item.NameAr.Substring(0, 24) + ".." : item.NameAr;
                 string footerText = expText.Length > 0 ? $"{priceText}  |  {expText}" : priceText;
 
-                // التوزيع محسوب على مقاس الملصق: الباركود بياخد المساحة المتبقية بعد السطور الثابتة
-                // (التوزيع القديم كان بيطلّع سطر السعر والصلاحية خارج ملصق 25 مم)
-                var layout = LabelLayout.Compute(settings.LabelWidthMm, settings.LabelHeightMm, wantTitle: titleLine.Length > 0);
+                // التوزيع محسوب على مقاس الملصق مع تقليل ارتفاع الباركود للنصف لمنع خروجه على ورقتين
+                var layout = LabelLayout.Compute(settings.LabelWidthMm, settings.LabelHeightMm, wantTitle: titleLine.Length > 0, halfBarcode: true);
 
                 // طباعة مهمة واحدة لكل الملصقات (صفحة لكل ملصق) بدل مهمة طباعة منفصلة لكل ملصق
                 using var printDoc = new PrintDocument();
@@ -75,21 +74,29 @@ namespace ePrescriptions.App.Services
                     var g = e.Graphics;
                     if (g == null) return;
 
-                    using var fontTitle = new Font("Tahoma", 7, FontStyle.Bold);
-                    using var fontItem = new Font("Tahoma", 8, FontStyle.Bold);
-                    using var fontPrice = new Font("Tahoma", 9, FontStyle.Bold);
+                    bool isCompact = layout.PageHeight < 80;
+                    float titlePt = isCompact ? 5.5f : 7f;
+                    float itemPt = isCompact ? 6.5f : 8f;
+                    float pricePt = isCompact ? 7f : 9f;
+
+                    using var fontTitle = new Font("Tahoma", titlePt, FontStyle.Bold);
+                    using var fontItem = new Font("Tahoma", itemPt, FontStyle.Bold);
+                    using var fontPrice = new Font("Tahoma", pricePt, FontStyle.Bold);
                     using var brush = new SolidBrush(Color.Black);
                     using var sfCenter = new StringFormat { Alignment = StringAlignment.Center };
 
                     int totalWidth = e.PageBounds.Width > 0 ? e.PageBounds.Width : layout.PageWidth;
+                    int titleH = isCompact ? 8 : LabelLayout.TitleLine;
+                    int nameH = isCompact ? 9 : LabelLayout.NameLine;
+                    int footerH = isCompact ? 10 : LabelLayout.FooterLine;
 
                     if (layout.HasTitle)
                     {
-                        g.DrawString(titleLine, fontTitle, brush, new RectangleF(0, layout.TitleY, totalWidth, LabelLayout.TitleLine), sfCenter);
+                        g.DrawString(titleLine, fontTitle, brush, new RectangleF(0, layout.TitleY, totalWidth, titleH), sfCenter);
                     }
 
                     // 2) اسم الدواء
-                    g.DrawString(displayName, fontItem, brush, new RectangleF(0, layout.NameY, totalWidth, LabelLayout.NameLine), sfCenter);
+                    g.DrawString(displayName, fontItem, brush, new RectangleF(0, layout.NameY, totalWidth, nameH), sfCenter);
 
                     // 3) رسم الباركود Code128 (Set C للأرقام)
                     try
@@ -107,7 +114,7 @@ namespace ePrescriptions.App.Services
                         var oldPixelOffset = g.PixelOffsetMode;
                         g.InterpolationMode = InterpolationMode.NearestNeighbor;
                         g.PixelOffsetMode = PixelOffsetMode.Half;
-                        g.DrawImage(barcodeBmp, bmpX, layout.BarcodeY);
+                        g.DrawImage(barcodeBmp, new Rectangle(bmpX, layout.BarcodeY, bmpWidthUnits, layout.BarcodeBitmapHeightUnits));
                         g.InterpolationMode = oldInterpolation;
                         g.PixelOffsetMode = oldPixelOffset;
                     }
@@ -118,7 +125,7 @@ namespace ePrescriptions.App.Services
                     }
 
                     // 4) السعر وتاريخ الصلاحية (ثابت أسفل الملصق)
-                    g.DrawString(footerText, fontPrice, brush, new RectangleF(0, layout.FooterY, totalWidth, LabelLayout.FooterLine), sfCenter);
+                    g.DrawString(footerText, fontPrice, brush, new RectangleF(0, layout.FooterY, totalWidth, footerH), sfCenter);
 
                     pagesPrinted++;
                     e.HasMorePages = pagesPrinted < labelCount;

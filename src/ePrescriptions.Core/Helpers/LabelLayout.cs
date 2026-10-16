@@ -44,28 +44,46 @@ namespace ePrescriptions.Core.Helpers
         public static int UnitsToPixels(int units) => (int)Math.Floor(units * 96.0 / 100.0);
 
         public static LabelLayout Compute(double widthMm, double heightMm, bool wantTitle)
-            => Build(widthMm, heightMm, wantTitle);
+            => Build(widthMm, heightMm, wantTitle, halfBarcode: false);
 
-        private static LabelLayout Build(double widthMm, double heightMm, bool title)
+        public static LabelLayout Compute(double widthMm, double heightMm, bool wantTitle, bool halfBarcode)
+            => Build(widthMm, heightMm, wantTitle, halfBarcode);
+
+        private static LabelLayout Build(double widthMm, double heightMm, bool title, bool halfBarcode = false)
         {
+            int pageH = heightMm >= 20 ? Math.Max(90, MmToHundredths(heightMm)) : Math.Max(45, MmToHundredths(heightMm));
+            bool isCompact = pageH < 80;
+
+            int margin = isCompact ? 1 : Margin;
+            int titleLine = isCompact ? 8 : TitleLine;
+            int nameLine = isCompact ? 9 : NameLine;
+            int footerLine = isCompact ? 10 : FooterLine;
+            int gap = isCompact ? 0 : Gap;
+
             var l = new LabelLayout
             {
-                PageWidth = Math.Max(150, MmToHundredths(widthMm)),
-                PageHeight = Math.Max(90, MmToHundredths(heightMm)),
+                PageWidth = Math.Max(120, MmToHundredths(widthMm)),
+                PageHeight = pageH,
                 HasTitle = title
             };
 
-            int y = Margin;
-            if (title) { l.TitleY = y; y += TitleLine; }
-            l.NameY = y; y += NameLine;
+            int y = margin;
+            if (title) { l.TitleY = y; y += titleLine; }
+            l.NameY = y; y += nameLine;
             l.BarcodeY = y;
-            l.FooterY = l.PageHeight - Margin - FooterLine;
+            l.FooterY = l.PageHeight - margin - footerLine;
 
-            int availUnits = l.FooterY - l.BarcodeY - Gap;
+            int availUnits = l.FooterY - l.BarcodeY - gap;
             int availPx = UnitsToPixels(Math.Max(0, availUnits));
 
             int heightParam = availPx - BarcodeTextAreaPx;
-            if (heightParam >= MinBarsPx + 10)
+            if (halfBarcode && heightParam > MinBarsPx)
+            {
+                // تقليل ارتفاع الباركود إلى النصف تقريباً لتفادي تجاوزه الملصق وخروجه على ورقتين
+                heightParam = Math.Max(MinBarsPx, heightParam / 2);
+            }
+
+            if (heightParam >= MinBarsPx && !isCompact)
             {
                 l.BarcodeIncludeText = true;
                 l.BarcodeHeightParam = Math.Min(heightParam, MaxBarcodeHeightParam);
@@ -78,8 +96,8 @@ namespace ePrescriptions.Core.Helpers
 
             int bitmapPx = l.BarcodeHeightParam + (l.BarcodeIncludeText ? BarcodeTextAreaPx : 0);
             l.BarcodeBitmapHeightUnits = PixelsToUnits(bitmapPx);
-            l.Fits = l.BarsHeightPx >= MinBarsPx
-                     && l.BarcodeY + l.BarcodeBitmapHeightUnits + Gap <= l.FooterY;
+            l.Fits = l.BarsHeightPx >= MinBarsPx - 10
+                     && l.BarcodeY + l.BarcodeBitmapHeightUnits + gap <= l.FooterY;
             return l;
         }
 

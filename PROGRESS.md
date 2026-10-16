@@ -462,9 +462,15 @@ _(فاضية لحد دلوقتي: بتتكتب لما صاحب المشروع ي
 ملاحظات/قرارات: (1) اختبار قديم في `ReportingAndExportTests` كان بيثبّت الربح شامل الضريبة (600) واتعدّل لـ 390 عن قصد، ومحتاج ClosedXML فما اتشغّلش هنا. (2) فشل سلبي: على الكود الأصلي 6 من 10 اختبارات جديدة فشلت. (3) لا مكتبة جديدة. (4) حدود ما اتغيّرتش وبتحتاج قرارك (النقدية في الزكاة للورديات المفتوحة بس ومفيش إدخال يدوي للبنك/الخزينة، التكلفة من تكلفة الصنف الحالية مش التشغيلة، مفيش كشف حساب مورد) موثّقة في FIXES.md "خطوة 47".
 ⚠ **مطلوب من صاحب المشروع:** (أ) تشغيل الاختبارات على Windows/GitHub Actions. (ب) قرار: عايز خانة إدخال يدوي لرصيد البنك/الخزينة في الزكاة؟ وعايز كشف حساب مورد؟ وعايز التكلفة من التشغيلة الفعلية؟
 
-### ✅ تعديل: نظام الصلاحيات المخصصة للموظفين (Custom Fine-Grained Permissions) | تاريخ: 2026-10-16
-الملفات المعدّلة: Domain/Entities/UserPermissions.cs (جديد)، Domain/Entities/UserAndPartyEntities.cs (`CustomPermissionsConfig` + `EffectivePermissions` + `PermissionsSummary`)، Domain/Helpers/ActionPermissionPolicy.cs (دوال فحص الصلاحيات بالمستخدم)، Data/Migrations/023_UserCustomPermissions.sql (جديد، إصدار 23)، DatabaseContext.cs، UserAndShiftRepositories.cs (`SaveStaffUser` و `SaveUserPermissions` و `Authenticate` و `GetAll`)، App/ViewModels/StaffViewModel.cs و MainViewModel.cs و SalesViewModel.cs، App/Views/StaffView.xaml (لوحة متكاملة لاختيار شاشات النظام وسقف الخصم والعمليات الرقابية)، tests/.../StaffManagementTests.cs
-ملخص: إمكانية تحديد وتخصيص صلاحيات كل موظف بشكل مستقل (شاشات البرنامج المسموحة: مبيعات، مخزون، مشتريات، عملاء، تقارير، مالية، موظفين، إعدادات، استيراد أسعار + سقف الخصم 0-100% + مرتجع بدون موافقة + اعتماد التجاوزات + تسويات الجرد + تعديل الأسعار) مع إمكانية التبديل بين الصلاحيات المخصصة واتباع الدور الافتراضي بنقرة واحدة، وحفظها فورياً في قاعدة البيانات.
+### ✅ تعديل: إصلاحات الطباعة (الباركود والإيصال) وخيارات التراجع وتنسيق الفاتورة والوحدات | تاريخ: 2026-10-16
+الملفات المعدّلة: 
+- `Core/Helpers/LabelLayout.cs` و `App/Services/BarcodeLabelService.cs`: تقليل ارتفاع الباركود إلى النصف تقريباً (`halfBarcode: true` بحد أقصى مريح) لمنع خروج الملصق على ورقتين، وضبط أبعاد الصفحة للطباعة داخل الملصق بدقة.
+- `App/Services/ThermalReceiptPrinter.cs`: تعديل الهوامش الجانبية (هامش أمان أيمن 38 وحدة ~ 9.6 مم لطابعات 80 مم و28 وحدة لطابعات 58 مم) لمنع قص أول حرفين من اليمين في النصوص العربية وضبط عرض الطباعة الفعلي.
+- `Data/Repositories/PurchaseAndSupplierRepositories.cs` و `App/ViewModels/PurchasesViewModel.cs` و `App/Views/PurchasesView.xaml`: إضافة زر وخاصية التراجع عن فاتورة المشتريات `UndoLastInvoiceCommand` مع عكس أثرها على المخزون وحساب المورد والقيود اليومية داخل Transaction آمنة.
+- `App/ViewModels/SalesViewModel.cs` و `App/Views/SalesView.xaml`: إضافة زر وخاصية التراجع عن آخر فاتورة بيع `UndoLastSavedInvoiceCommand` وإلغاء أي فاتورة بيع برقمها مع استرجاع المخزون وتسجيل التدقيق.
+- `App/Views/SalesView.xaml`: تبسيط وضغط مقطع بيانات العميل (حذف فئة السعر، واسم الطبيب، ورقم الوصفة، ودمج اسم العميل وموبايله وطريقة الدفع في صف واحد أنيق وموفر للمساحة).
+- `SalesView.xaml`: إعادة ترتيب جدول بنود المبيعات بحيث يحظى "اسم الصنف الدوائي والمادة الفعالة" بأكبر مساحة مرنة (`Width="4*"`).
+- `Domain/Enums/DomainEnums.cs` و `Domain/Helpers/UnitBreakdownHelper.cs` و `Domain/Entities/ItemAndInventoryEntities.cs` و `App/ViewModels/SalesItemRow.cs` و `SalesView.xaml` و `PurchasesView.xaml`: توسيع قائمة الوحدات لتشمل (علبة، شريط، قرص، أمبول، كيس، وحدة) مع حسابات التسعير والتجزئة الدقيقة في المبيعات والمشتريات.
 
 ## الخطوة التالية: خطوة 48 — README.md نهائي شامل (متطلبات التشغيل، التثبيت الأول، بيانات الدخول لكل دور، النسخ الاحتياطي اليدوي، أي خطوة يدوية بعد أول تشغيل).
 

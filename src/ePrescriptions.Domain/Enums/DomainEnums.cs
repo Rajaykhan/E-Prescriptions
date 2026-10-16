@@ -32,7 +32,10 @@ namespace ePrescriptions.Domain.Enums
     {
         Box = 1,         // علبة (الوحدة الكبرى)
         Strip = 2,       // شريط (الوحدة المتوسطة)
-        Piece = 3        // وحدة / قرص (أصغر وحدة مخزنية)
+        Piece = 3,       // قرص (أصغر وحدة مخزنية)
+        Ampoule = 4,     // أمبول
+        Sachet = 5,      // كيس
+        Unit = 6         // وحدة
     }
 
     public enum UserRole

@@ -178,6 +178,17 @@ namespace ePrescriptions.Tests
         }
 
         [Fact]
+        public void LabelLayout_HalfBarcode_ShouldReduceHeightToPreventDoublePageFeed()
+        {
+            var l = LabelLayout.Compute(50, 25, wantTitle: true, halfBarcode: true);
+            l.PageHeight.Should().Be(98);
+            l.HasTitle.Should().BeTrue();
+            l.BarcodeHeightParam.Should().BeLessThan(30);
+            l.BarcodeHeightParam.Should().Be(16);
+            l.Fits.Should().BeTrue();
+        }
+
+        [Fact]
         public void LabelLayout_OldFixedLayout_WasOverflowingThe25mmLabel()
         {
             // القديم: y = 2 + 14 (عنوان) + 16 (اسم) + باركود 36+20 بكسل + 2، وبعدين سطر السعر بارتفاع 18

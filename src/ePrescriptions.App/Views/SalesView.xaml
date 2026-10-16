@@ -69,47 +69,35 @@
                     </Grid>
                 </Border>
 
-                <!-- 2) بيانات العميل والوصفة الطبية وطريقة الدفع -->
-                <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="{StaticResource BrushBorder}" BorderThickness="0,0,0,1" Padding="14,10">
+                <!-- 2) بيانات العميل وطريقة الدفع (مدمجة وموفرة للمساحة) -->
+                <Border Grid.Row="1" Background="#F8FAFC" BorderBrush="{StaticResource BrushBorder}" BorderThickness="0,0,0,1" Padding="10,4">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="2*" />
-                            <ColumnDefinition Width="1.5*" />
-                            <ColumnDefinition Width="1.2*" />
-                            <ColumnDefinition Width="1.5*" />
-                            <ColumnDefinition Width="1.5*" />
-                            <ColumnDefinition Width="1.5*" />
+                            <ColumnDefinition Width="2.5*" />
+                            <ColumnDefinition Width="1.4*" />
+                            <ColumnDefinition Width="1.8*" />
                         </Grid.ColumnDefinitions>
 
                         <!-- اسم العميل -->
-                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="4">
-                            <TextBlock Text="اسم العميل:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding CustomerName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource AppTextBox}" />
+                        <StackPanel Grid.Row="0" Grid.Column="0" Margin="4,2">
+                            <TextBlock Text="اسم العميل:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,2" FontSize="11.5" />
+                            <TextBox Text="{Binding CustomerName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource AppTextBox}" Height="30" />
                         </StackPanel>
 
                         <!-- موبايل العميل -->
-                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="4">
-                            <TextBlock Text="رقم الموبايل:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding CustomerPhone, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource AppTextBox}" />
-                        </StackPanel>
-
-                        <!-- فئة السعر (قطاعي / جملة) -->
-                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="4">
-                            <TextBlock Text="فئة السعر:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,4" />
-                            <ComboBox SelectedValue="{Binding SelectedPriceCategory}" SelectedValuePath="Tag" Style="{StaticResource AppComboBox}">
-                                <ComboBoxItem Content="قطاعي" Tag="{x:Static enums:PriceCategory.Retail}" IsSelected="True" />
-                                <ComboBoxItem Content="جملة" Tag="{x:Static enums:PriceCategory.Wholesale}" />
-                            </ComboBox>
+                        <StackPanel Grid.Row="0" Grid.Column="1" Margin="4,2">
+                            <TextBlock Text="رقم الموبايل:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,2" FontSize="11.5" />
+                            <TextBox Text="{Binding CustomerPhone, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource AppTextBox}" Height="30" />
                         </StackPanel>
 
                         <!-- طريقة الدفع -->
-                        <StackPanel Grid.Row="0" Grid.Column="3" Margin="4">
-                            <TextBlock Text="طريقة الدفع:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,4" />
-                            <ComboBox SelectedValue="{Binding SelectedPaymentMethod}" SelectedValuePath="Tag" Style="{StaticResource AppComboBox}">
+                        <StackPanel Grid.Row="0" Grid.Column="2" Margin="4,2">
+                            <TextBlock Text="طريقة الدفع:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,2" FontSize="11.5" />
+                            <ComboBox SelectedValue="{Binding SelectedPaymentMethod}" SelectedValuePath="Tag" Style="{StaticResource AppComboBox}" Height="30">
                                 <ComboBoxItem Content="نقدي (Cash)" Tag="{x:Static enums:PaymentMethod.Cash}" IsSelected="True" />
                                 <ComboBoxItem Content="شبكة / كارت" Tag="{x:Static enums:PaymentMethod.Network}" />
                                 <ComboBoxItem Content="آجل (على الحساب)" Tag="{x:Static enums:PaymentMethod.OnAccount}" />
@@ -118,19 +106,7 @@
                             </ComboBox>
                         </StackPanel>
 
-                        <!-- رقم الوصفة الإلكترونية -->
-                        <StackPanel Grid.Row="0" Grid.Column="4" Margin="4">
-                            <TextBlock Text="رقم الوصفة (Rx):" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding PrescriptionNumber, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource AppTextBox}" />
-                        </StackPanel>
-
-                        <!-- اسم الطبيب المعالج -->
-                        <StackPanel Grid.Row="0" Grid.Column="5" Margin="4">
-                            <TextBlock Text="اسم الطبيب:" FontWeight="SemiBold" Foreground="#3F5A73" Margin="0,0,0,4" />
-                            <TextBox Text="{Binding DoctorName, UpdateSourceTrigger=PropertyChanged}" Style="{StaticResource AppTextBox}" />
-                        </StackPanel>
-
-                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="6">
+                        <StackPanel Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3">
                         <!-- لا بيع بدون وردية مفتوحة -->
                         <Border Margin="4,8,4,0" Padding="12,8" Background="#FEF2F2" BorderBrush="#FCA5A5" BorderThickness="1" CornerRadius="8"
                                 Visibility="{Binding NoOpenShift, Converter={StaticResource BoolToVis}}">
@@ -324,64 +300,67 @@
                           Margin="10,8">
                     <DataGrid.Columns>
                         <!-- كود الصنف -->
-                        <DataGridTextColumn Header="الكود" Binding="{Binding Code}" Width="100" IsReadOnly="True" />
+                        <DataGridTextColumn Header="الكود" Binding="{Binding Code}" Width="75" IsReadOnly="True" />
 
-                        <!-- اسم الصنف العربي -->
-                        <DataGridTemplateColumn Header="اسم الصنف الدوائي والمادة الفعالة" Width="2*" IsReadOnly="True">
+                        <!-- اسم الصنف العربي والمادة الفعالة (أكبر مساحة بالجدول) -->
+                        <DataGridTemplateColumn Header="اسم الصنف الدوائي والمادة الفعالة" Width="4*" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel VerticalAlignment="Center" Margin="6,2">
-                                        <TextBlock Text="{Binding NameAr}" FontWeight="Bold" Foreground="#0B2A45" />
-                                        <TextBlock Text="{Binding ActiveIngredient}" FontSize="11" Foreground="#64748B" />
+                                        <TextBlock Text="{Binding NameAr}" FontWeight="Bold" Foreground="#0B2A45" FontSize="12.5" />
+                                        <TextBlock Text="{Binding ActiveIngredient}" FontSize="10.5" Foreground="#64748B" />
                                     </StackPanel>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
-                        <!-- وحدة البيع (علبة / شريط / قرص) -->
-                        <DataGridTemplateColumn Header="الوحدة" Width="110">
+                        <!-- وحدة البيع (علبة / شريط / قرص / أمبول / كيس / وحدة) -->
+                        <DataGridTemplateColumn Header="الوحدة" Width="95">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <ComboBox SelectedValue="{Binding SelectedUnitLevel, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Tag" Height="30">
+                                    <ComboBox SelectedValue="{Binding SelectedUnitLevel, UpdateSourceTrigger=PropertyChanged}" SelectedValuePath="Tag" Height="28">
                                         <ComboBoxItem Content="علبة" Tag="{x:Static enums:UnitLevel.Box}" />
                                         <ComboBoxItem Content="شريط" Tag="{x:Static enums:UnitLevel.Strip}" />
                                         <ComboBoxItem Content="قرص" Tag="{x:Static enums:UnitLevel.Piece}" />
+                                        <ComboBoxItem Content="أمبول" Tag="{x:Static enums:UnitLevel.Ampoule}" />
+                                        <ComboBoxItem Content="كيس" Tag="{x:Static enums:UnitLevel.Sachet}" />
+                                        <ComboBoxItem Content="وحدة" Tag="{x:Static enums:UnitLevel.Unit}" />
                                     </ComboBox>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
                         <!-- الكمية المباعة -->
-                        <DataGridTemplateColumn Header="الكمية" Width="80">
+                        <DataGridTemplateColumn Header="الكمية" Width="65">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBox Text="{Binding Quantity, UpdateSourceTrigger=PropertyChanged}" 
-                                             FontWeight="Bold" TextAlignment="Center" Height="30" />
+                                             FontWeight="Bold" TextAlignment="Center" Height="28" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
                         <!-- سعر الوحدة بالجنيه -->
-                        <DataGridTextColumn Header="سعر الوحدة" Binding="{Binding FormattedUnitPrice}" Width="95" IsReadOnly="True" />
+                        <DataGridTextColumn Header="سعر الوحدة" Binding="{Binding FormattedUnitPrice}" Width="85" IsReadOnly="True" />
 
                         <!-- الخصم بالقروش -->
-                        <DataGridTemplateColumn Header="الخصم (قرش)" Width="85">
+                        <DataGridTemplateColumn Header="الخصم (قرش)" Width="75">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
-                                    <TextBox Text="{Binding DiscountPiastres, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" Height="30" />
+                                    <TextBox Text="{Binding DiscountPiastres, UpdateSourceTrigger=PropertyChanged}" TextAlignment="Center" Height="28" />
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
                         </DataGridTemplateColumn>
 
                         <!-- ضريبة البند -->
-                        <DataGridTextColumn Header="الضريبة" Binding="{Binding FormattedVat}" Width="90" IsReadOnly="True" />
+                        <DataGridTextColumn Header="الضريبة" Binding="{Binding FormattedVat}" Width="75" IsReadOnly="True" />
 
                         <!-- رصيد المخزون مع التنبيه -->
-                        <DataGridTemplateColumn Header="رصيد المخزون" Width="120" IsReadOnly="True">
+                        <DataGridTemplateColumn Header="رصيد المخزون" Width="95" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                        <Border CornerRadius="4" Padding="5,2" Background="{Binding IsLowStock, Converter={x:Null}}">
+                                        <Border CornerRadius="4" Padding="4,2" Background="{Binding IsLowStock, Converter={x:Null}}">
                                             <TextBlock Text="{Binding FormattedStockDisplay}" FontSize="11" />
                                         </Border>
                                     </StackPanel>
@@ -390,21 +369,23 @@
                         </DataGridTemplateColumn>
 
                         <!-- التشغيلة والصلاحية -->
-                        <DataGridTextColumn Header="التشغيلة" Binding="{Binding BatchNumber}" Width="95" IsReadOnly="True" />
-                        <DataGridTextColumn Header="الصلاحية" Binding="{Binding FormattedExpiry}" Width="95" IsReadOnly="True" />
-                        <DataGridTextColumn Header="تنبيه" Binding="{Binding WarningText}" Width="260" IsReadOnly="True">
+                        <DataGridTextColumn Header="التشغيلة" Binding="{Binding BatchNumber}" Width="80" IsReadOnly="True" />
+                        <DataGridTextColumn Header="الصلاحية" Binding="{Binding FormattedExpiry}" Width="85" IsReadOnly="True" />
+                        <DataGridTextColumn Header="تنبيه" Binding="{Binding WarningText}" Width="110" IsReadOnly="True">
                             <DataGridTextColumn.ElementStyle>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Foreground" Value="#DC2626" />
                                     <Setter Property="FontWeight" Value="SemiBold" />
-                                    <Setter Property="TextWrapping" Value="Wrap" />
+                                    <Setter Property="TextWrapping" Value="NoWrap" />
+                                    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
                                     <Setter Property="VerticalAlignment" Value="Center" />
+                                    <Setter Property="ToolTip" Value="{Binding WarningText}" />
                                 </Style>
                             </DataGridTextColumn.ElementStyle>
                         </DataGridTextColumn>
 
                         <!-- الإجمالي -->
-                        <DataGridTemplateColumn Header="الإجمالي" Width="105" IsReadOnly="True">
+                        <DataGridTemplateColumn Header="الإجمالي" Width="95" IsReadOnly="True">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <TextBlock Text="{Binding FormattedTotal}" FontWeight="Bold" Foreground="#0A4C86" VerticalAlignment="Center" HorizontalAlignment="Center" />
@@ -413,13 +394,13 @@
                         </DataGridTemplateColumn>
 
                         <!-- زر حذف البند -->
-                        <DataGridTemplateColumn Header="حذف" Width="60">
+                        <DataGridTemplateColumn Header="حذف" Width="45">
                             <DataGridTemplateColumn.CellTemplate>
                                 <DataTemplate>
                                     <Button Command="{Binding DataContext.RemoveItemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                            CommandParameter="{Binding}"
-                                            Background="#FEE2E2" BorderThickness="0" Cursor="Hand" Width="30" Height="30">
-                                        <Path Data="{StaticResource IconTrash}" Fill="#EF4444" Width="14" Height="14" Stretch="Uniform" />
+                                             CommandParameter="{Binding}"
+                                             Background="#FEE2E2" BorderThickness="0" Cursor="Hand" Width="26" Height="26">
+                                        <Path Data="{StaticResource IconTrash}" Fill="#EF4444" Width="12" Height="12" Stretch="Uniform" />
                                     </Button>
                                 </DataTemplate>
                             </DataGridTemplateColumn.CellTemplate>
@@ -591,6 +572,16 @@
                                         <TextBlock Text="F10" Foreground="White" FontSize="11" FontWeight="Bold" />
                                     </Border>
                                     <TextBlock Text="فتح الدرج" />
+                                </StackPanel>
+                            </Button>
+
+                            <!-- تراجع عن الفاتورة الأخيرة -->
+                            <Button Command="{Binding UndoLastSavedInvoiceCommand}" Style="{StaticResource PosActionButton}" Background="#DC2626" Margin="4,2" ToolTip="التراجع عن آخر فاتورة بيع تم حفظها وإلغاؤها واسترجاع أصنافها للمخزون">
+                                <StackPanel Orientation="Horizontal">
+                                    <Border Background="#991B1B" CornerRadius="4" Padding="5,2" Margin="0,0,6,0">
+                                        <Path Data="{StaticResource IconReturn}" Fill="White" Width="10" Height="10" Stretch="Uniform" />
+                                    </Border>
+                                    <TextBlock Text="تراجع عن الفاتورة" Foreground="White" FontWeight="Bold" />
                                 </StackPanel>
                             </Button>
                         </WrapPanel>

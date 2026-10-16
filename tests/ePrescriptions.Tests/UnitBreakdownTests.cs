@@ -56,5 +56,18 @@ namespace ePrescriptions.Tests
             formatted.Should().Contain("2 علبة");
             formatted.Should().Contain("5 قرص");
         }
+
+        [Fact]
+        public void CalculateSmallestUnits_ShouldSupportAmpouleSachetAndUnit()
+        {
+            // أمبول وكيس ووحدة تحسب كأصغر وحدة مباشرة
+            UnitBreakdownHelper.CalculateSmallestUnits(UnitLevel.Ampoule, 5, 2, 10).Should().Be(5);
+            UnitBreakdownHelper.CalculateSmallestUnits(UnitLevel.Sachet, 8, 1, 10).Should().Be(8);
+            UnitBreakdownHelper.CalculateSmallestUnits(UnitLevel.Unit, 12, 1, 1).Should().Be(12);
+
+            UnitBreakdownHelper.UnitLevelName(UnitLevel.Ampoule).Should().Be("أمبول");
+            UnitBreakdownHelper.UnitLevelName(UnitLevel.Sachet).Should().Be("كيس");
+            UnitBreakdownHelper.UnitLevelName(UnitLevel.Unit).Should().Be("وحدة");
+        }
     }
 }

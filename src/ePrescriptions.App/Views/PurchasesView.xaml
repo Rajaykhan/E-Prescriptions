@@ -124,6 +124,9 @@
                                             <ComboBoxItem Content="علبة" Tag="{x:Static enums:UnitLevel.Box}" IsSelected="True" />
                                             <ComboBoxItem Content="شريط" Tag="{x:Static enums:UnitLevel.Strip}" />
                                             <ComboBoxItem Content="قرص" Tag="{x:Static enums:UnitLevel.Piece}" />
+                                            <ComboBoxItem Content="أمبول" Tag="{x:Static enums:UnitLevel.Ampoule}" />
+                                            <ComboBoxItem Content="كيس" Tag="{x:Static enums:UnitLevel.Sachet}" />
+                                            <ComboBoxItem Content="وحدة" Tag="{x:Static enums:UnitLevel.Unit}" />
                                         </ComboBox>
                                     </StackPanel>
 
@@ -172,6 +175,9 @@
                                                     <ComboBoxItem Content="علبة" Tag="{x:Static enums:UnitLevel.Box}" />
                                                     <ComboBoxItem Content="شريط" Tag="{x:Static enums:UnitLevel.Strip}" />
                                                     <ComboBoxItem Content="قرص" Tag="{x:Static enums:UnitLevel.Piece}" />
+                                                    <ComboBoxItem Content="أمبول" Tag="{x:Static enums:UnitLevel.Ampoule}" />
+                                                    <ComboBoxItem Content="كيس" Tag="{x:Static enums:UnitLevel.Sachet}" />
+                                                    <ComboBoxItem Content="وحدة" Tag="{x:Static enums:UnitLevel.Unit}" />
                                                 </ComboBox>
                                             </DataTemplate>
                                         </DataGridTemplateColumn.CellTemplate>
@@ -236,6 +242,7 @@
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
                                     <StackPanel Grid.Column="1" Margin="8,0" HorizontalAlignment="Center">
@@ -262,6 +269,13 @@
 
                                     <Button Grid.Column="5" Command="{Binding SaveInvoiceCommand}" Style="{StaticResource PosActionButton}" Background="#059669" Padding="16,8" Margin="8,0">
                                         <TextBlock Text="حفظ واعتماد الفاتورة" FontSize="13" />
+                                    </Button>
+
+                                    <Button Grid.Column="6" Command="{Binding UndoLastInvoiceCommand}" Style="{StaticResource PosSecondaryButton}" Background="#FEE2E2" BorderBrush="#FCA5A5" Padding="14,8" Margin="4,0" ToolTip="التراجع عن آخر فاتورة مشتريات تم حفظها وعكس أثرها على المخزون والمورد">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Path Data="{StaticResource IconReturn}" Fill="#DC2626" Width="13" Height="13" Stretch="Uniform" Margin="0,0,6,0" />
+                                            <TextBlock Text="تراجع عن الفاتورة" Foreground="#B91C1C" FontWeight="Bold" FontSize="12" />
+                                        </StackPanel>
                                     </Button>
                                 </Grid>
                             </Border>

@@ -250,10 +250,26 @@ namespace ePrescriptions.App.ViewModels
         private string _statusMessage = string.Empty;
         public string StatusMessage { get => _statusMessage; set => SetProperty(ref _statusMessage, value); }
 
+        private int _lastSavedInvoiceId;
+        public int LastSavedInvoiceId { get => _lastSavedInvoiceId; set => SetProperty(ref _lastSavedInvoiceId, value); }
+
+        private string _lastSavedInvoiceNumber = string.Empty;
+        public string LastSavedInvoiceNumber
+        {
+            get => _lastSavedInvoiceNumber;
+            set
+            {
+                if (SetProperty(ref _lastSavedInvoiceNumber, value))
+                    OnPropertyChanged(nameof(CanUndoLastInvoice));
+            }
+        }
+        public bool CanUndoLastInvoice => !string.IsNullOrEmpty(_lastSavedInvoiceNumber);
+
         // الأوامر
         public IRelayCommand RefreshCommand { get; }
         public IRelayCommand NewInvoiceCommand { get; }
         public IRelayCommand SaveInvoiceCommand { get; }
+        public IRelayCommand UndoLastInvoiceCommand { get; }
         public IRelayCommand<PurchaseItemRow> RemoveCartItemCommand { get; }
         public IRelayCommand AddItemToCartCommand { get; }
         public IRelayCommand BarcodeEnterCommand { get; }
@@ -302,9 +318,51 @@ namespace ePrescriptions.App.ViewModels
             });
             AddSupplierCommand = new RelayCommand(AddSupplier);
             PaySupplierVoucherCommand = new RelayCommand(PaySupplierVoucher);
+            UndoLastInvoiceCommand = new RelayCommand(UndoLastInvoice);
 
             LoadData();
             StartNewInvoice();
+        }
+
+        public void UndoLastInvoice()
+        {
+            if (string.IsNullOrWhiteSpace(LastSavedInvoiceNumber) || LastSavedInvoiceId <= 0)
+            {
+                var latest = _purchaseRepository.GetLatestPurchaseInvoice();
+                if (latest != null)
+                {
+                    LastSavedInvoiceId = latest.Id;
+                    LastSavedInvoiceNumber = latest.InvoiceNumber;
+                }
+            }
+
+            if (LastSavedInvoiceId <= 0)
+            {
+                StatusMessage = "لا توجد فاتورة مشتريات حديثة للتراجع عنها.";
+                return;
+            }
+
+            var confirm = System.Windows.MessageBox.Show(
+                $"هل أنت متأكد من التراجع عن فاتورة المشتريات رقم '{LastSavedInvoiceNumber}'؟\nسيتم خصم الكميات من المخزون وعكس رصيد المورد وقيود اليومية.",
+                "تأكيد التراجع عن فاتورة المشتريات",
+                System.Windows.MessageBoxButton.YesNo,
+                System.Windows.MessageBoxImage.Warning,
+                System.Windows.MessageBoxResult.No,
+                System.Windows.MessageBoxOptions.RtlReading | System.Windows.MessageBoxOptions.RightAlign);
+
+            if (confirm != System.Windows.MessageBoxResult.Yes) return;
+
+            if (_purchaseRepository.CancelPurchaseInvoice(LastSavedInvoiceId, "تراجع من شاشة المشتريات", out string err))
+            {
+                StatusMessage = $"تم بنجاح التراجع عن فاتورة المشتريات '{LastSavedInvoiceNumber}' وإلغاؤها واسترجاع أرصدة المخزون.";
+                LastSavedInvoiceNumber = string.Empty;
+                LastSavedInvoiceId = 0;
+                LoadData();
+            }
+            else
+            {
+                StatusMessage = $"تعذر التراجع عن فاتورة المشتريات: {err}";
+            }
         }
 
         public void LoadData()
@@ -556,7 +614,9 @@ namespace ePrescriptions.App.ViewModels
 
             if (_purchaseRepository.SavePurchaseInvoice(inv, out string err))
             {
-                string saved = $"تم حفظ فاتورة الشراء '{inv.InvoiceNumber}' بنجاح وزيادة أرصدة المخزون.";
+                LastSavedInvoiceId = inv.Id;
+                LastSavedInvoiceNumber = inv.InvoiceNumber;
+                string saved = $"تم حفظ فاتورة الشراء '{inv.InvoiceNumber}' بنجاح وزيادة أرصدة المخزون (يمكنك التراجع عنها بالضغط على زر التراجع).";
                 LoadData();
                 StartNewInvoice();
                 StatusMessage = saved;

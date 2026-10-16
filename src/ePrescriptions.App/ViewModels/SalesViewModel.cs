@@ -225,7 +225,20 @@ namespace ePrescriptions.App.ViewModels
             set => SetProperty(ref _cancelReason, value);
         }
 
+        private string _lastSavedInvoiceNumber = string.Empty;
+        public string LastSavedInvoiceNumber
+        {
+            get => _lastSavedInvoiceNumber;
+            set
+            {
+                if (SetProperty(ref _lastSavedInvoiceNumber, value))
+                    OnPropertyChanged(nameof(CanUndoLastInvoice));
+            }
+        }
+        public bool CanUndoLastInvoice => !string.IsNullOrEmpty(_lastSavedInvoiceNumber);
+
         public IRelayCommand CancelInvoiceCommand { get; }
+        public IRelayCommand UndoLastSavedInvoiceCommand { get; }
 
         /// <summary>تأكيد إلغاء الفاتورة. الافتراضي نافذة سؤال، ويمكن استبداله في الاختبارات.</summary>
         public Func<string, bool> ConfirmCancelInvoice { get; set; } = message =>
@@ -236,6 +249,49 @@ namespace ePrescriptions.App.ViewModels
                 System.Windows.MessageBoxImage.Warning,
                 System.Windows.MessageBoxResult.No,
                 System.Windows.MessageBoxOptions.RtlReading | System.Windows.MessageBoxOptions.RightAlign) == System.Windows.MessageBoxResult.Yes;
+
+        public void UndoLastSavedInvoice()
+        {
+            string targetNumber = !string.IsNullOrWhiteSpace(LastSavedInvoiceNumber) ? LastSavedInvoiceNumber : CancelInvoiceNumber;
+            if (string.IsNullOrWhiteSpace(targetNumber))
+            {
+                SetStatus("اكتب رقم الفاتورة أو احفظ فاتورة أولاً للتراجع عنها.", false);
+                return;
+            }
+
+            var target = _invoiceRepository.FindByNumber(targetNumber);
+            if (target == null)
+            {
+                SetStatus($"لم يتم العثور على فاتورة بالرقم: {targetNumber}", false);
+                return;
+            }
+
+            if (!ConfirmCancelInvoice($"فاتورة رقم {target.InvoiceNumber} بإجمالي {(target.TotalPiastres / 100m).ToString("F2", System.Globalization.CultureInfo.InvariantCulture)} ج.م"))
+            {
+                SetStatus("تم إلغاء طلب التراجع.", false);
+                return;
+            }
+
+            var user = _sessionService?.CurrentUser;
+            int userId = user?.Id ?? 1;
+            string userName = user?.FullName ?? "المستخدم الحالي";
+            string reason = string.IsNullOrWhiteSpace(CancelReason) ? "تراجع عن حفظ الفاتورة" : CancelReason.Trim();
+
+            if (_invoiceRepository.CancelInvoice(target.Id, userId, userName, reason, out string err))
+            {
+                if (user != null) LogInvoiceCancellation(target, reason, user);
+                SetStatus($"تم بنجاح التراجع عن الفاتورة {target.InvoiceNumber} وإلغاؤها واسترجاع المخزون.", true);
+                PlayConfirmSound();
+                LastSavedInvoiceNumber = string.Empty;
+                CancelInvoiceNumber = string.Empty;
+                CancelReason = string.Empty;
+            }
+            else
+            {
+                SetStatus($"تعذر التراجع عن الفاتورة: {err}", false);
+                PlayWarningSound();
+            }
+        }
 
         public void CancelInvoice()
         {
@@ -330,7 +386,14 @@ namespace ePrescriptions.App.ViewModels
         }
 
         public IRelayCommand LoadOriginalInvoiceCommand { get; }
-        public string InvoiceTypeTitle => IsReturnMode ? "فاتورة مرتجع مبيعات" : "فاتورة مبيعات جديدة";
+        public string InvoiceTypeTitle
+        {
+            get
+            {
+                if (IsViewingPastInvoice) return $"عرض فاتورة سابقة ({InvoiceNumber})";
+                return IsReturnMode ? "فاتورة مرتجع مبيعات" : "فاتورة مبيعات جديدة";
+            }
+        }
 
         // ===== خطوة 35: بدائل الصنف بالمادة الفعالة =====
         public ObservableCollection<ItemAlternativeRow> AlternativeItems { get; } = new();
@@ -693,6 +756,7 @@ namespace ePrescriptions.App.ViewModels
             OpenShiftCommand = new RelayCommand(OpenShiftFromSales);
             AddAlternativeToCartCommand = new RelayCommand<ItemAlternativeRow>(OnAddAlternativeToCart);
             CloseAlternativesCommand = new RelayCommand(() => IsAlternativesVisible = false);
+            UndoLastSavedInvoiceCommand = new RelayCommand(UndoLastSavedInvoice);
 
             LoadInitialData();
             StartNewInvoice();
@@ -1279,11 +1343,12 @@ namespace ePrescriptions.App.ViewModels
 
                 if (saved)
                 {
+                    LastSavedInvoiceNumber = invoice.InvoiceNumber;
                     if (managerApproval != null) LogManagerApproval(invoice, managerApproval);
                     NeedsManagerApproval = false;
                     ApprovalReason = string.Empty;
                     ApproverUsername = string.Empty;
-                    SetStatus($"تم حفظ الفاتورة بنجاح: {invoice.InvoiceNumber}", true);
+                    SetStatus($"تم حفظ الفاتورة بنجاح: {invoice.InvoiceNumber} (يمكنك التراجع عنها بـ F9)", true);
                     PlayConfirmSound();
                     StartNewInvoice();
                 }

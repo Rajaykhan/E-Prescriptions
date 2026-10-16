@@ -287,6 +287,229 @@ namespace ePrescriptions.Data.Repositories
         }
 
         /// <summary>
+        /// إلغاء / التراجع عن حفظ فاتورة مشتريات: يعكس المخزون لنفس التشغيلات، يعكس رصيد المورد،
+        /// ويعكس القيود اليومية المنشأة، ويعلّم الفاتورة ملغاة داخل Transaction واحدة.
+        /// </summary>
+        public bool CancelPurchaseInvoice(int purchaseInvoiceId, string reason, out string errorMessage)
+        {
+            errorMessage = string.Empty;
+            if (string.IsNullOrWhiteSpace(reason))
+            {
+                errorMessage = "يرجى كتابة سبب التراجع عن فاتورة المشتريات.";
+                return false;
+            }
+
+            using var conn = _dbContext.CreateConnection();
+            using var trans = conn.BeginTransaction();
+            try
+            {
+                // التأكد من وجود أعمدة الإلغاء إذا لم تكن موجودة
+                try
+                {
+                    using var alterCmd = conn.CreateCommand();
+                    alterCmd.Transaction = trans;
+                    alterCmd.CommandText = "ALTER TABLE PurchaseInvoices ADD COLUMN Status INTEGER NOT NULL DEFAULT 1;";
+                    alterCmd.ExecuteNonQuery();
+                }
+                catch { /* العمود موجود بالفعل */ }
+
+                int id = 0;
+                string invoiceNumber = string.Empty;
+                int supplierId = 0;
+                long remainingPiastres = 0;
+                int status = 1;
+
+                using (var cmd = conn.CreateCommand())
+                {
+                    cmd.Transaction = trans;
+                    cmd.CommandText = "SELECT Id, InvoiceNumber, SupplierId, RemainingHalalas, COALESCE(Status, 1) AS Status FROM PurchaseInvoices WHERE Id = @id;";
+                    cmd.Parameters.AddWithValue("@id", purchaseInvoiceId);
+                    using var r = cmd.ExecuteReader();
+                    if (!r.Read())
+                    {
+                        errorMessage = "فاتورة المشتريات غير موجودة.";
+                        return false;
+                    }
+                    id = Convert.ToInt32(r["Id"]);
+                    invoiceNumber = r["InvoiceNumber"].ToString() ?? string.Empty;
+                    supplierId = Convert.ToInt32(r["SupplierId"]);
+                    remainingPiastres = Convert.ToInt64(r["RemainingHalalas"]);
+                    status = Convert.ToInt32(r["Status"]);
+                }
+
+                if (status == 3)
+                {
+                    errorMessage = "فاتورة المشتريات ملغاة بالفعل.";
+                    return false;
+                }
+
+                // 1) قراءة بنود الفاتورة لعكس المخزون والتشغيلات
+                var items = new List<(int ItemId, int SmallestUnits, int BatchId, string BatchNumber)>();
+                using (var itemCmd = conn.CreateCommand())
+                {
+                    itemCmd.Transaction = trans;
+                    itemCmd.CommandText = "SELECT ItemId, SmallestUnitsCount, COALESCE(BatchId, 0) AS BatchId, BatchNumber FROM PurchaseInvoiceItems WHERE PurchaseInvoiceId = @id;";
+                    itemCmd.Parameters.AddWithValue("@id", id);
+                    using var ir = itemCmd.ExecuteReader();
+                    while (ir.Read())
+                    {
+                        items.Add((
+                            Convert.ToInt32(ir["ItemId"]),
+                            Convert.ToInt32(ir["SmallestUnitsCount"]),
+                            Convert.ToInt32(ir["BatchId"]),
+                            ir["BatchNumber"]?.ToString() ?? string.Empty
+                        ));
+                    }
+                }
+
+                // 2) خصم الكميات من المخزون والتشغيلات
+                foreach (var itm in items)
+                {
+                    using var stockCmd = conn.CreateCommand();
+                    stockCmd.Transaction = trans;
+                    stockCmd.CommandText = "UPDATE Items SET TotalStockSmallestUnits = TotalStockSmallestUnits - @deduct WHERE Id = @itemId;";
+                    stockCmd.Parameters.AddWithValue("@deduct", itm.SmallestUnits);
+                    stockCmd.Parameters.AddWithValue("@itemId", itm.ItemId);
+                    stockCmd.ExecuteNonQuery();
+
+                    if (itm.BatchId > 0)
+                    {
+                        using var batchCmd = conn.CreateCommand();
+                        batchCmd.Transaction = trans;
+                        batchCmd.CommandText = "UPDATE ItemBatches SET RemainingSmallestUnits = MAX(0, RemainingSmallestUnits - @deduct) WHERE Id = @bId;";
+                        batchCmd.Parameters.AddWithValue("@deduct", itm.SmallestUnits);
+                        batchCmd.Parameters.AddWithValue("@bId", itm.BatchId);
+                        batchCmd.ExecuteNonQuery();
+                    }
+                    else if (!string.IsNullOrEmpty(itm.BatchNumber))
+                    {
+                        using var batchCmd = conn.CreateCommand();
+                        batchCmd.Transaction = trans;
+                        batchCmd.CommandText = "UPDATE ItemBatches SET RemainingSmallestUnits = MAX(0, RemainingSmallestUnits - @deduct) WHERE ItemId = @itemId AND BatchNumber = @batch;";
+                        batchCmd.Parameters.AddWithValue("@deduct", itm.SmallestUnits);
+                        batchCmd.Parameters.AddWithValue("@itemId", itm.ItemId);
+                        batchCmd.Parameters.AddWithValue("@batch", itm.BatchNumber);
+                        batchCmd.ExecuteNonQuery();
+                    }
+                }
+
+                // 3) عكس أثر الآجل على رصيد المورد
+                if (remainingPiastres > 0 && supplierId > 0)
+                {
+                    using var suppCmd = conn.CreateCommand();
+                    suppCmd.Transaction = trans;
+                    suppCmd.CommandText = "UPDATE Suppliers SET BalancePiastres = BalancePiastres - @rem WHERE Id = @sId;";
+                    suppCmd.Parameters.AddWithValue("@rem", remainingPiastres);
+                    suppCmd.Parameters.AddWithValue("@sId", supplierId);
+                    suppCmd.ExecuteNonQuery();
+                }
+
+                // 4) عكس قيود اليومية المنشأة
+                var originals = new List<(string Num, string Debit, string Credit, long Amount)>();
+                using (var jCmd = conn.CreateCommand())
+                {
+                    jCmd.Transaction = trans;
+                    jCmd.CommandText = "SELECT EntryNumber, DebitAccount, CreditAccount, AmountPiastres FROM JournalEntries WHERE EntryNumber LIKE @p ORDER BY Id;";
+                    cmd.Parameters.Clear();
+                    jCmd.Parameters.AddWithValue("@p", "JV-PUR-" + invoiceNumber + "-%");
+                    using var jr = jCmd.ExecuteReader();
+                    while (jr.Read())
+                    {
+                        originals.Add((
+                            jr["EntryNumber"].ToString() ?? string.Empty,
+                            jr["DebitAccount"].ToString() ?? string.Empty,
+                            jr["CreditAccount"].ToString() ?? string.Empty,
+                            Convert.ToInt64(jr["AmountPiastres"])
+                        ));
+                    }
+                }
+
+                foreach (var o in originals)
+                {
+                    using var rev = conn.CreateCommand();
+                    rev.Transaction = trans;
+                    rev.CommandText = @"
+                        INSERT INTO JournalEntries (EntryNumber, Date, Description, DebitAccount, CreditAccount, AmountPiastres, CreatedAt)
+                        VALUES (@num, @date, @desc, @deb, @crd, @amt, datetime('now'));";
+                    rev.Parameters.AddWithValue("@num", "JV-CXL-" + o.Num.Substring(3));
+                    rev.Parameters.AddWithValue("@date", DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture));
+                    rev.Parameters.AddWithValue("@desc", $"عكس قيد إلغاء فاتورة مشتريات رقم {invoiceNumber}");
+                    rev.Parameters.AddWithValue("@deb", o.Credit);
+                    rev.Parameters.AddWithValue("@crd", o.Debit);
+                    rev.Parameters.AddWithValue("@amt", o.Amount);
+                    rev.ExecuteNonQuery();
+                }
+
+                // 5) تعليم الفاتورة ملغاة وتحديث الملاحظات
+                using (var upd = conn.CreateCommand())
+                {
+                    upd.Transaction = trans;
+                    upd.CommandText = @"UPDATE PurchaseInvoices SET Status = 3, Notes = COALESCE(Notes, '') || ' [ملغاة: ' || @r || ']' WHERE Id = @id;";
+                    upd.Parameters.AddWithValue("@r", reason.Trim());
+                    upd.Parameters.AddWithValue("@id", id);
+                    upd.ExecuteNonQuery();
+                }
+
+                trans.Commit();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                trans.Rollback();
+                errorMessage = ex.Message;
+                Logger.LogException(ex, "CancelPurchaseInvoice");
+                return false;
+            }
+        }
+
+        public PurchaseInvoice? GetLatestPurchaseInvoice()
+        {
+            using var conn = _dbContext.CreateConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT Id, InvoiceNumber, SupplierId, SupplierName, InvoiceDate, SubtotalHalalas, VatHalalas, TotalHalalas, PaidHalalas, RemainingHalalas, Notes FROM PurchaseInvoices WHERE Status != 3 ORDER BY Id DESC LIMIT 1;";
+            try
+            {
+                using var r = cmd.ExecuteReader();
+                if (!r.Read()) return null;
+                return new PurchaseInvoice
+                {
+                    Id = Convert.ToInt32(r["Id"]),
+                    InvoiceNumber = r["InvoiceNumber"].ToString() ?? string.Empty,
+                    SupplierId = Convert.ToInt32(r["SupplierId"]),
+                    SupplierName = r["SupplierName"].ToString() ?? string.Empty,
+                    InvoiceDate = DateTime.TryParse(r["InvoiceDate"].ToString(), out var dt) ? dt : DateTime.Now,
+                    SubtotalPiastres = Convert.ToInt64(r["SubtotalHalalas"]),
+                    VatPiastres = Convert.ToInt64(r["VatHalalas"]),
+                    TotalPiastres = Convert.ToInt64(r["TotalHalalas"]),
+                    PaidPiastres = Convert.ToInt64(r["PaidHalalas"]),
+                    RemainingPiastres = Convert.ToInt64(r["RemainingHalalas"]),
+                    Notes = r["Notes"]?.ToString() ?? string.Empty
+                };
+            }
+            catch
+            {
+                // إذا لم يكن عمود Status موجوداً بعد
+                cmd.CommandText = "SELECT Id, InvoiceNumber, SupplierId, SupplierName, InvoiceDate, SubtotalHalalas, VatHalalas, TotalHalalas, PaidHalalas, RemainingHalalas, Notes FROM PurchaseInvoices ORDER BY Id DESC LIMIT 1;";
+                using var r2 = cmd.ExecuteReader();
+                if (!r2.Read()) return null;
+                return new PurchaseInvoice
+                {
+                    Id = Convert.ToInt32(r2["Id"]),
+                    InvoiceNumber = r2["InvoiceNumber"].ToString() ?? string.Empty,
+                    SupplierId = Convert.ToInt32(r2["SupplierId"]),
+                    SupplierName = r2["SupplierName"].ToString() ?? string.Empty,
+                    InvoiceDate = DateTime.TryParse(r2["InvoiceDate"].ToString(), out var dt) ? dt : DateTime.Now,
+                    SubtotalPiastres = Convert.ToInt64(r2["SubtotalHalalas"]),
+                    VatPiastres = Convert.ToInt64(r2["VatHalalas"]),
+                    TotalPiastres = Convert.ToInt64(r2["TotalHalalas"]),
+                    PaidPiastres = Convert.ToInt64(r2["PaidHalalas"]),
+                    RemainingPiastres = Convert.ToInt64(r2["RemainingHalalas"]),
+                    Notes = r2["Notes"]?.ToString() ?? string.Empty
+                };
+            }
+        }
+
+        /// <summary>
         /// أوامر شراء مقترحة من قائمة النواقص (أصناف نشطة رصيدها <= حدها الأدنى)، مجمّعة بمورد آخر شراء لكل صنف.
         /// للقراءة فقط: مفيش حفظ ولا حركة مخزون ولا رقم مستند بيتحجز. الأصناف الموجودة في أمر شراء مفتوح بتتستبعد.
         /// </summary>
@@ -437,6 +660,125 @@ namespace ePrescriptions.Data.Repositories
                 });
             }
             return list;
+        }
+
+        /// <summary>
+        /// تحميل فاتورة مشتريات كاملة ببنودها لعرض الفواتير السابقة
+        /// </summary>
+        public PurchaseInvoice? GetFullPurchaseInvoice(string invoiceNumber)
+        {
+            string number = (invoiceNumber ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(number)) return null;
+
+            using var conn = _dbContext.CreateConnection();
+            var inv = new PurchaseInvoice();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    SELECT Id, InvoiceNumber, SupplierId, SupplierName, InvoiceDate,
+                           SubtotalPiastres, VatPiastres, TotalPiastres, PaidPiastres,
+                           RemainingPiastres, Notes, CreatedAt
+                    FROM PurchaseInvoices 
+                    WHERE InvoiceNumber = @n COLLATE NOCASE;";
+                cmd.Parameters.AddWithValue("@n", number);
+                using var r = cmd.ExecuteReader();
+                if (!r.Read()) return null;
+
+                inv.Id = Convert.ToInt32(r["Id"]);
+                inv.InvoiceNumber = r["InvoiceNumber"].ToString() ?? string.Empty;
+                inv.SupplierId = Convert.ToInt32(r["SupplierId"]);
+                inv.SupplierName = r["SupplierName"].ToString() ?? string.Empty;
+                inv.InvoiceDate = DbDate.Parse(r["InvoiceDate"].ToString() ?? DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
+                inv.SubtotalPiastres = Convert.ToInt64(r["SubtotalPiastres"]);
+                inv.VatPiastres = Convert.ToInt64(r["VatPiastres"]);
+                inv.TotalPiastres = Convert.ToInt64(r["TotalPiastres"]);
+                inv.PaidPiastres = Convert.ToInt64(r["PaidPiastres"]);
+                inv.RemainingPiastres = Convert.ToInt64(r["RemainingPiastres"]);
+                inv.Notes = r["Notes"] is DBNull ? null : r["Notes"].ToString();
+                inv.CreatedAt = DbDate.Parse(r["CreatedAt"].ToString() ?? DateTime.Now.ToString("s", System.Globalization.CultureInfo.InvariantCulture));
+            }
+
+            // تحميل بنود فاتورة الشراء
+            using (var itemCmd = conn.CreateCommand())
+            {
+                itemCmd.CommandText = @"
+                    SELECT Id, ItemId, ItemCode, ItemNameAr, BatchNumber, ExpiryDate,
+                           BatchId, UnitLevel, QuantityPurchased, SmallestUnitsCount,
+                           UnitCostPiastres, VatPercent, VatPiastres, TotalPiastres
+                    FROM PurchaseInvoiceItems
+                    WHERE PurchaseInvoiceId = @id ORDER BY Id ASC;";
+                itemCmd.Parameters.AddWithValue("@id", inv.Id);
+                using var ir = itemCmd.ExecuteReader();
+                while (ir.Read())
+                {
+                    inv.Items.Add(new PurchaseInvoiceItem
+                    {
+                        Id = Convert.ToInt32(ir["Id"]),
+                        PurchaseInvoiceId = inv.Id,
+                        ItemId = Convert.ToInt32(ir["ItemId"]),
+                        ItemCode = ir["ItemCode"].ToString() ?? string.Empty,
+                        ItemNameAr = ir["ItemNameAr"].ToString() ?? string.Empty,
+                        BatchNumber = ir["BatchNumber"].ToString() ?? string.Empty,
+                        ExpiryDate = DbDate.Parse(ir["ExpiryDate"].ToString() ?? DateTime.Today.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture)),
+                        BatchId = ir["BatchId"] == DBNull.Value ? 0 : Convert.ToInt32(ir["BatchId"]),
+                        UnitLevel = (UnitLevel)Convert.ToInt32(ir["UnitLevel"]),
+                        QuantityPurchased = Convert.ToInt32(ir["QuantityPurchased"]),
+                        SmallestUnitsCount = Convert.ToInt32(ir["SmallestUnitsCount"]),
+                        UnitCostPiastres = Convert.ToInt64(ir["UnitCostPiastres"]),
+                        VatPercent = ir["VatPercent"] == DBNull.Value ? null : Convert.ToInt32(ir["VatPercent"]),
+                        VatPiastres = Convert.ToInt64(ir["VatPiastres"]),
+                        TotalPiastres = Convert.ToInt64(ir["TotalPiastres"])
+                    });
+                }
+            }
+
+            return inv;
+        }
+
+        /// <summary>
+        /// الحصول على رقم فاتورة المشتريات السابقة
+        /// </summary>
+        public string? GetPreviousPurchaseInvoiceNumber(string currentInvoiceNumber)
+        {
+            using var conn = _dbContext.CreateConnection();
+            using var cmd = conn.CreateCommand();
+
+            string current = (currentInvoiceNumber ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(current))
+            {
+                cmd.CommandText = "SELECT InvoiceNumber FROM PurchaseInvoices ORDER BY Id DESC LIMIT 1;";
+            }
+            else
+            {
+                cmd.CommandText = @"
+                    SELECT InvoiceNumber FROM PurchaseInvoices 
+                    WHERE Id < (SELECT Id FROM PurchaseInvoices WHERE InvoiceNumber = @n COLLATE NOCASE LIMIT 1)
+                    ORDER BY Id DESC LIMIT 1;";
+                cmd.Parameters.AddWithValue("@n", current);
+            }
+
+            var res = cmd.ExecuteScalar();
+            return res == null || res == DBNull.Value ? null : res.ToString();
+        }
+
+        /// <summary>
+        /// الحصول على رقم فاتورة المشتريات التالية
+        /// </summary>
+        public string? GetNextPurchaseInvoiceNumber(string currentInvoiceNumber)
+        {
+            string current = (currentInvoiceNumber ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(current)) return null;
+
+            using var conn = _dbContext.CreateConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT InvoiceNumber FROM PurchaseInvoices 
+                WHERE Id > (SELECT Id FROM PurchaseInvoices WHERE InvoiceNumber = @n COLLATE NOCASE LIMIT 1)
+                ORDER BY Id ASC LIMIT 1;";
+            cmd.Parameters.AddWithValue("@n", current);
+
+            var res = cmd.ExecuteScalar();
+            return res == null || res == DBNull.Value ? null : res.ToString();
         }
     }
 }

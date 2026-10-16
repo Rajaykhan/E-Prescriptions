@@ -73,11 +73,13 @@
         </DataTemplate>
     </Window.Resources>
 
-    <!-- اختصارات لوحة المفاتيح العامة (F1..F10) إذا كانت الشاشة المعروضة شاشة مبيعات -->
+    <!-- اختصارات لوحة المفاتيح العامة (F1..F10, Delete) إذا كانت الشاشة المعروضة شاشة مبيعات -->
     <Window.InputBindings>
         <KeyBinding Key="F1" Command="{Binding CurrentViewModel.NewInvoiceCommand}" />
         <KeyBinding Key="F2" Command="{Binding CurrentViewModel.SaveInvoiceCommand}" />
         <KeyBinding Key="F3" Command="{Binding CurrentViewModel.PrintInvoiceCommand}" />
+        <KeyBinding Key="F4" Command="{Binding CurrentViewModel.OpenItemSearchCommand}" />
+        <KeyBinding Key="Delete" Command="{Binding CurrentViewModel.RemoveSelectedItemCommand}" />
         <KeyBinding Key="F8" Command="{Binding CurrentViewModel.SuspendInvoiceCommand}" />
         <KeyBinding Key="F9" Command="{Binding CurrentViewModel.ToggleReturnModeCommand}" />
         <KeyBinding Key="F10" Command="{Binding CurrentViewModel.OpenCashDrawerCommand}" />

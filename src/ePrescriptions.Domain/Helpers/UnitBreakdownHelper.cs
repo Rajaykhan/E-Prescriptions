@@ -23,9 +23,26 @@ namespace ePrescriptions.Core.Helpers
                 UnitLevel.Box => quantity * piecesPerBox,
                 UnitLevel.Strip => quantity * piecesPerSingleStrip,
                 UnitLevel.Piece => quantity,
+                UnitLevel.Ampoule => quantity,
+                UnitLevel.Sachet => quantity,
+                UnitLevel.Unit => quantity,
                 _ => quantity
             };
         }
+
+        /// <summary>
+        /// الاسم العربي المعتمد لمستوى الوحدة
+        /// </summary>
+        public static string UnitLevelName(UnitLevel unit) => unit switch
+        {
+            UnitLevel.Box => "علبة",
+            UnitLevel.Strip => "شريط",
+            UnitLevel.Piece => "قرص",
+            UnitLevel.Ampoule => "أمبول",
+            UnitLevel.Sachet => "كيس",
+            UnitLevel.Unit => "وحدة",
+            _ => "وحدة"
+        };
 
         /// <summary>
         /// تفكيك رصيد المخزون الكلي بأصغر وحدة إلى وصف مقروء: X علبة و Y شريط و Z قرص

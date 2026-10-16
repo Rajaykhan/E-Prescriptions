@@ -916,5 +916,191 @@ namespace ePrescriptions.Data.Repositories
                 Status = (InvoiceStatus)Convert.ToInt32(r["Status"])
             };
         }
+
+        /// <summary>
+        /// تحميل فاتورة كاملة ببنودها وطرق دفعها برقم الفاتورة لعرض الفواتير السابقة والتنقل بينها
+        /// </summary>
+        public Invoice? GetFullInvoiceByNumber(string invoiceNumber)
+        {
+            string number = (invoiceNumber ?? string.Empty).Trim();
+            if (number.Length == 0) return null;
+
+            using var conn = _dbContext.CreateConnection();
+            var inv = new Invoice();
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = @"
+                    SELECT Id, InvoiceNumber, Type, Date, CustomerId, CustomerName, CustomerPhone,
+                           PriceCategory, PaymentMethod, PrescriptionNumber, DoctorName, UserId, UserName, ShiftId,
+                           SubtotalPiastres, DiscountPiastres, VatPiastres, TotalPiastres, PaidPiastres, RemainingPiastres,
+                           Notes, OriginalInvoiceId, Status, QrCodeText
+                    FROM Invoices WHERE InvoiceNumber = @n COLLATE NOCASE;";
+                cmd.Parameters.AddWithValue("@n", number);
+                using var r = cmd.ExecuteReader();
+                if (!r.Read()) return null;
+
+                inv.Id = Convert.ToInt32(r["Id"]);
+                inv.InvoiceNumber = r["InvoiceNumber"].ToString() ?? string.Empty;
+                inv.Type = (InvoiceType)Convert.ToInt32(r["Type"]);
+                inv.Date = DbDate.Parse(r["Date"].ToString() ?? DateTime.Now.ToString("s", System.Globalization.CultureInfo.InvariantCulture));
+                inv.CustomerId = r["CustomerId"] == DBNull.Value ? (int?)null : Convert.ToInt32(r["CustomerId"]);
+                inv.CustomerName = r["CustomerName"].ToString() ?? string.Empty;
+                inv.CustomerPhone = r["CustomerPhone"].ToString() ?? string.Empty;
+                inv.PriceCategory = (PriceCategory)Convert.ToInt32(r["PriceCategory"]);
+                inv.PaymentMethod = (PaymentMethod)Convert.ToInt32(r["PaymentMethod"]);
+                inv.PrescriptionNumber = r["PrescriptionNumber"] == DBNull.Value ? null : r["PrescriptionNumber"].ToString();
+                inv.DoctorName = r["DoctorName"] == DBNull.Value ? null : r["DoctorName"].ToString();
+                inv.UserId = Convert.ToInt32(r["UserId"]);
+                inv.UserName = r["UserName"].ToString() ?? string.Empty;
+                inv.ShiftId = Convert.ToInt32(r["ShiftId"]);
+                inv.SubtotalPiastres = Convert.ToInt64(r["SubtotalPiastres"]);
+                inv.DiscountPiastres = Convert.ToInt64(r["DiscountPiastres"]);
+                inv.VatPiastres = Convert.ToInt64(r["VatPiastres"]);
+                inv.TotalPiastres = Convert.ToInt64(r["TotalPiastres"]);
+                inv.PaidPiastres = Convert.ToInt64(r["PaidPiastres"]);
+                inv.RemainingPiastres = Convert.ToInt64(r["RemainingPiastres"]);
+                inv.Notes = r["Notes"] == DBNull.Value ? null : r["Notes"].ToString();
+                inv.OriginalInvoiceId = r["OriginalInvoiceId"] == DBNull.Value ? (int?)null : Convert.ToInt32(r["OriginalInvoiceId"]);
+                inv.Status = (InvoiceStatus)Convert.ToInt32(r["Status"]);
+                inv.QrCodeText = r["QrCodeText"] == DBNull.Value ? null : r["QrCodeText"].ToString();
+            }
+
+            // تحميل بنود الفاتورة
+            using (var itemCmd = conn.CreateCommand())
+            {
+                itemCmd.CommandText = @"
+                    SELECT Id, ItemId, ItemCode, ItemNameAr, BatchId, BatchNumber, ExpiryDate,
+                           UnitLevel, QuantitySold, SmallestUnitsCount, UnitPricePiastres, DiscountPiastres,
+                           VatPercent, VatPiastres, TotalPiastres, PrescriptionNumber, DoctorName
+                    FROM InvoiceItems WHERE InvoiceId = @id ORDER BY Id ASC;";
+                itemCmd.Parameters.AddWithValue("@id", inv.Id);
+                using var ir = itemCmd.ExecuteReader();
+                while (ir.Read())
+                {
+                    inv.Items.Add(new InvoiceItem
+                    {
+                        Id = Convert.ToInt32(ir["Id"]),
+                        InvoiceId = inv.Id,
+                        ItemId = Convert.ToInt32(ir["ItemId"]),
+                        ItemCode = ir["ItemCode"].ToString() ?? string.Empty,
+                        ItemNameAr = ir["ItemNameAr"].ToString() ?? string.Empty,
+                        BatchId = ir["BatchId"] == DBNull.Value ? (int?)null : Convert.ToInt32(ir["BatchId"]),
+                        BatchNumber = ir["BatchNumber"].ToString() ?? string.Empty,
+                        ExpiryDate = ir["ExpiryDate"] == DBNull.Value ? (DateTime?)null : DbDate.Parse(ir["ExpiryDate"].ToString()!),
+                        UnitLevel = (UnitLevel)Convert.ToInt32(ir["UnitLevel"]),
+                        QuantitySold = Convert.ToInt32(ir["QuantitySold"]),
+                        SmallestUnitsCount = Convert.ToInt32(ir["SmallestUnitsCount"]),
+                        UnitPricePiastres = Convert.ToInt64(ir["UnitPricePiastres"]),
+                        DiscountPiastres = Convert.ToInt64(ir["DiscountPiastres"]),
+                        VatPercent = Convert.ToInt32(ir["VatPercent"]),
+                        VatPiastres = Convert.ToInt64(ir["VatPiastres"]),
+                        TotalPiastres = Convert.ToInt64(ir["TotalPiastres"]),
+                        PrescriptionNumber = ir["PrescriptionNumber"] == DBNull.Value ? null : ir["PrescriptionNumber"].ToString(),
+                        DoctorName = ir["DoctorName"] == DBNull.Value ? null : ir["DoctorName"].ToString()
+                    });
+                }
+            }
+
+            inv.Payments = LoadPayments(conn, null, inv.Id);
+            return inv;
+        }
+
+        /// <summary>
+        /// الحصول على رقم الفاتورة السابقة بالنسبة لرقم الفاتورة الحالي
+        /// </summary>
+        public string? GetPreviousInvoiceNumber(string currentInvoiceNumber)
+        {
+            using var conn = _dbContext.CreateConnection();
+            using var cmd = conn.CreateCommand();
+
+            string current = (currentInvoiceNumber ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(current))
+            {
+                cmd.CommandText = "SELECT InvoiceNumber FROM Invoices ORDER BY Id DESC LIMIT 1;";
+            }
+            else
+            {
+                cmd.CommandText = @"
+                    SELECT InvoiceNumber FROM Invoices 
+                    WHERE Id < (SELECT Id FROM Invoices WHERE InvoiceNumber = @n COLLATE NOCASE LIMIT 1)
+                    ORDER BY Id DESC LIMIT 1;";
+                cmd.Parameters.AddWithValue("@n", current);
+            }
+
+            var res = cmd.ExecuteScalar();
+            return res == null || res == DBNull.Value ? null : res.ToString();
+        }
+
+        /// <summary>
+        /// الحصول على رقم الفاتورة التالية بالنسبة لرقم الفاتورة الحالي
+        /// </summary>
+        public string? GetNextInvoiceNumber(string currentInvoiceNumber)
+        {
+            string current = (currentInvoiceNumber ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(current)) return null;
+
+            using var conn = _dbContext.CreateConnection();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = @"
+                SELECT InvoiceNumber FROM Invoices 
+                WHERE Id > (SELECT Id FROM Invoices WHERE InvoiceNumber = @n COLLATE NOCASE LIMIT 1)
+                ORDER BY Id ASC LIMIT 1;";
+            cmd.Parameters.AddWithValue("@n", current);
+
+            var res = cmd.ExecuteScalar();
+            return res == null || res == DBNull.Value ? null : res.ToString();
+        }
+
+        /// <summary>
+        /// جلب سجل الفواتير الحديثة للتصفح والبحث السريع
+        /// </summary>
+        public List<Invoice> GetRecentInvoices(int limit = 50, string? search = null)
+        {
+            var list = new List<Invoice>();
+            using var conn = _dbContext.CreateConnection();
+            using var cmd = conn.CreateCommand();
+
+            string q = (search ?? string.Empty).Trim();
+            if (string.IsNullOrEmpty(q))
+            {
+                cmd.CommandText = @"
+                    SELECT Id, InvoiceNumber, Type, Date, CustomerName, CustomerPhone,
+                           PaymentMethod, TotalPiastres, PaidPiastres, RemainingPiastres, Status
+                    FROM Invoices 
+                    ORDER BY Id DESC LIMIT @lim;";
+                cmd.Parameters.AddWithValue("@lim", limit);
+            }
+            else
+            {
+                cmd.CommandText = @"
+                    SELECT Id, InvoiceNumber, Type, Date, CustomerName, CustomerPhone,
+                           PaymentMethod, TotalPiastres, PaidPiastres, RemainingPiastres, Status
+                    FROM Invoices 
+                    WHERE InvoiceNumber LIKE @q OR CustomerName LIKE @q OR CustomerPhone LIKE @q
+                    ORDER BY Id DESC LIMIT @lim;";
+                cmd.Parameters.AddWithValue("@q", $"%{q}%");
+                cmd.Parameters.AddWithValue("@lim", limit);
+            }
+
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+            {
+                list.Add(new Invoice
+                {
+                    Id = Convert.ToInt32(r["Id"]),
+                    InvoiceNumber = r["InvoiceNumber"].ToString() ?? string.Empty,
+                    Type = (InvoiceType)Convert.ToInt32(r["Type"]),
+                    Date = DbDate.Parse(r["Date"].ToString() ?? DateTime.Now.ToString("s", System.Globalization.CultureInfo.InvariantCulture)),
+                    CustomerName = r["CustomerName"].ToString() ?? string.Empty,
+                    CustomerPhone = r["CustomerPhone"].ToString() ?? string.Empty,
+                    PaymentMethod = (PaymentMethod)Convert.ToInt32(r["PaymentMethod"]),
+                    TotalPiastres = Convert.ToInt64(r["TotalPiastres"]),
+                    PaidPiastres = Convert.ToInt64(r["PaidPiastres"]),
+                    RemainingPiastres = Convert.ToInt64(r["RemainingPiastres"]),
+                    Status = (InvoiceStatus)Convert.ToInt32(r["Status"])
+                });
+            }
+            return list;
+        }
     }
 }
